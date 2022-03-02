@@ -1,15 +1,14 @@
 package main
 
 import (
+	"bookstore/internal/controller"
 	_ "bookstore/internal/store"
+	"bookstore/pkg/app"
 	"bookstore/server"
 	"bookstore/store/factory"
 	"context"
-	"log"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+
+	"github.com/gorilla/mux"
 )
 
 func main() {
@@ -17,33 +16,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	bookController := controller.NewBookController(s)
+	router := &server.Router{
+		Router:         mux.NewRouter(),
+		BookController: bookController,
+	}
+	httpServer := server.NewHttpServer(router)
 
-	srv := server.NewBookStoreServer(":8080", s) // 创建http服务实例
-
-	errChan, err := srv.ListenAndServer() // 运行http服务
+	newApp, err := app.NewApp(app.Context(context.Background()), app.Server(httpServer...), app.Version("v1.0.0"))
 	if err != nil {
-		log.Println("web server start failed:", err)
-		return
-	}
-	log.Println("web server start ok")
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case err = <-errChan:
-		log.Println("web server run failed:", err)
-		return
-	case <-c:
-		log.Println("bookstore program is exiting...")
-		ctx, cf := context.WithTimeout(context.Background(), time.Second)
-		defer cf()
-		err = srv.Shutdown(ctx) // 优雅关闭http服务实例
+		panic(err)
 	}
 
-	if err != nil {
-		log.Println("bookstore program exit error:", err)
-		return
+	if err = newApp.Run(); err != nil {
+		panic(err)
 	}
-	log.Println("bookstore program exit ok")
 }
